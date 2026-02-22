@@ -169,6 +169,12 @@ export function ChatPanel({ messages, setMessages, chatHistory }: ChatPanelProps
               finalAnswer = data.answer || streamedContent;
               finalCitations = data.citations || [];
               resultType = 'answer';
+              // Update display with clean answer (removes JSON wrapper)
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === streamingMsgId ? { ...m, content: finalAnswer } : m
+                )
+              );
             } else if (data.type === 'clarification') {
               finalAnswer = data.question;
               resultType = 'clarification';

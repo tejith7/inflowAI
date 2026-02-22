@@ -1,102 +1,89 @@
-import { ai } from '@/ai/genkit';
-import { chatbotQueryClarification } from '@/ai/flows/chatbot-query-clarification';
-import { hybridSearch } from '@/lib/search-utils';
-import { z } from 'genkit';
+import { genkit } from 'genkit';
+import { googleAI } from '@genkit-ai/google-genai';
 
 export const maxDuration = 60;
 
-const EmployeeInfoRetrievalOutputSchema = z.object({
-    answer: z.string(),
-    citations: z.array(z.string()),
-});
-
-const systemPrompt = `You are InfoWise, a helpful and intelligent internal knowledge hub chatbot for a large organization. Your goal is to provide concise, accurate, and reliable answers to employee questions based ONLY on the internal company documents provided below. You should consider the entire conversation history to understand the full context of the user's latest query.
-
-Instructions:
-1.  Carefully read the latest query, the conversation history, and all the provided documents.
-2.  Formulate a direct and to-the-point answer using ONLY the information from the provided documents.
-3.  If the answer cannot be found within the provided documents, explicitly state that the information is not available in the knowledge base.
-4.  For your answer, create a list of citations referencing the document titles you used.
-5.  Respond in the required JSON format with "answer" and "citations" fields.`;
-
 export async function POST(req: Request) {
-    try {
-        const { query, conversationHistory, contextDocuments } = await req.json();
+    const encoder = new TextEncoder();
 
-        // Step 1: Clarification check (non-streamed, fast)
-        const clarificationResult = await chatbotQueryClarification({
-            query,
-            history: conversationHistory || [],
+    try {
+        const body = await req.json();
+        const { query, conversationHistory, contextDocuments } = body;
+
+        // Initialize Genkit fresh in the route to avoid module caching issues
+        const ai = genkit({
+            plugins: [googleAI()],
+            model: 'googleai/gemini-2.5-flash',
         });
 
-        if (clarificationResult.clarificationNeeded && clarificationResult.question) {
-            return new Response(
-                `data: ${JSON.stringify({ type: 'clarification', question: clarificationResult.question })}\n\n`,
-                {
-                    headers: {
-                        'Content-Type': 'text/event-stream',
-                        'Cache-Control': 'no-cache',
-                        Connection: 'keep-alive',
-                    },
-                }
-            );
-        }
-
-        // Step 2: Hybrid search for relevant docs
-        const relevantDocuments = await hybridSearch(query, contextDocuments || [], 5);
-
-        // Build the prompt content
+        // Build context
         const historyText = conversationHistory?.length
             ? conversationHistory.map((h: { role: string; content: string }) => `- ${h.role}: ${h.content}`).join('\n')
             : '(No history)';
 
-        const docsText = relevantDocuments.length
-            ? relevantDocuments.map((d: { title: string; content: string }) =>
+        // Simple keyword search
+        const queryTerms = query.toLowerCase().split(/\s+/);
+        const relevantDocs = (contextDocuments || [])
+            .map((doc: { title: string; content: string }) => ({
+                doc,
+                score: queryTerms.reduce((s: number, t: string) =>
+                    s + ((doc.title + ' ' + doc.content).toLowerCase().includes(t) ? 1 : 0), 0),
+            }))
+            .sort((a: { score: number }, b: { score: number }) => b.score - a.score)
+            .slice(0, 5)
+            .map((s: { doc: { title: string; content: string } }) => s.doc);
+
+        const docsText = relevantDocs.length
+            ? relevantDocs.map((d: { title: string; content: string }) =>
                 `- Document Title: ${d.title}\n  Document Content: ${d.content}`
             ).join('\n')
             : '(No documents available)';
 
+        const systemPrompt = `You are InfoWise, a helpful and intelligent internal knowledge hub chatbot. Answer employee questions based ONLY on the provided documents. If the answer cannot be found, state that. Consider conversation history for context.`;
+
         const userPrompt = `Conversation History:\n${historyText}\n\nEmployee's Latest Query: ${query}\n\nAvailable Documents:\n${docsText}`;
 
-        // Step 3: Stream the LLM response
+        // Stream response
         const { stream, response } = await ai.generateStream({
             system: systemPrompt,
             prompt: userPrompt,
-            output: { schema: EmployeeInfoRetrievalOutputSchema },
         });
 
-        const encoder = new TextEncoder();
+        let fullText = '';
 
         const readableStream = new ReadableStream({
             async start(controller) {
                 try {
-                    // Stream text chunks as they arrive
                     for await (const chunk of stream) {
                         const text = chunk.text;
                         if (text) {
+                            fullText += text;
                             controller.enqueue(
                                 encoder.encode(`data: ${JSON.stringify({ type: 'token', content: text })}\n\n`)
                             );
                         }
                     }
 
-                    // After stream completes, get the structured output
-                    const finalResponse = await response;
-                    const output = finalResponse.output;
+                    await response;
+
+                    // Extract citations by checking which doc titles appear in the response
+                    const citations: string[] = [];
+                    for (const doc of relevantDocs) {
+                        if (fullText.toLowerCase().includes(doc.title.toLowerCase())) {
+                            citations.push(doc.title);
+                        }
+                    }
 
                     controller.enqueue(
                         encoder.encode(
-                            `data: ${JSON.stringify({
-                                type: 'done',
-                                answer: output?.answer || finalResponse.text,
-                                citations: output?.citations || [],
-                            })}\n\n`
+                            `data: ${JSON.stringify({ type: 'done', answer: fullText, citations })}\n\n`
                         )
                     );
-                } catch (error) {
+                } catch (err) {
+                    console.error('Stream chunk error:', err);
                     controller.enqueue(
                         encoder.encode(
-                            `data: ${JSON.stringify({ type: 'error', message: 'An error occurred while generating the response.' })}\n\n`
+                            `data: ${JSON.stringify({ type: 'error', message: 'Error generating response.' })}\n\n`
                         )
                     );
                 } finally {
@@ -112,10 +99,10 @@ export async function POST(req: Request) {
                 Connection: 'keep-alive',
             },
         });
-    } catch (error) {
-        console.error('Streaming error:', error);
+    } catch (error: any) {
+        console.error('STREAMING ROUTE ERROR:', error?.message, error?.stack);
         return new Response(
-            `data: ${JSON.stringify({ type: 'error', message: 'Sorry, I encountered an error. Please try again.' })}\n\n`,
+            `data: ${JSON.stringify({ type: 'error', message: error?.message || 'Server error' })}\n\n`,
             {
                 status: 500,
                 headers: { 'Content-Type': 'text/event-stream' },
