@@ -1,0 +1,423 @@
+
+{
+  "entities": {
+    "Document": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Document",
+      "type": "object",
+      "description": "Represents an ingested piece of internal information, such as a policy document, training material, or HR guide, processed and stored in the knowledge base for retrieval.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Document entity."
+        },
+        "title": {
+          "type": "string",
+          "description": "The title or name of the document."
+        },
+        "content": {
+          "type": "string",
+          "description": "The extracted textual content of the document, used for search and RAG."
+        },
+        "originalUrl": {
+          "type": "string",
+          "description": "The original URL of the document if it was sourced from a web-based system (e.g., intranet, wiki).",
+          "format": "uri"
+        },
+        "originalFilePath": {
+          "type": "string",
+          "description": "The original file path of the document if it was sourced from a file share or local system."
+        },
+        "originalFilename": {
+          "type": "string",
+          "description": "The original filename of the document if it was sourced from a file upload."
+        },
+        "fileType": {
+          "type": "string",
+          "description": "The type of the original file (e.g., 'pdf', 'docx', 'html', 'txt')."
+        },
+        "sourceSystemId": {
+          "type": "string",
+          "description": "Reference to the SourceSystem from which this document was ingested. (Relationship: SourceSystem 1:N Document)"
+        },
+        "ingestedAt": {
+          "type": "string",
+          "description": "Timestamp when the document was first ingested into the InfoWise system.",
+          "format": "date-time"
+        },
+        "lastModifiedAt": {
+          "type": "string",
+          "description": "Timestamp indicating the last modification date of the original document or its last update within the system.",
+          "format": "date-time"
+        },
+        "tags": {
+          "type": "array",
+          "description": "References to tags associated with this document for categorization. (Relationship: Tag N:N Document)",
+          "items": {
+            "type": "string"
+          }
+        },
+        "originalAuthor": {
+          "type": "string",
+          "description": "The author or creator of the original document, if identifiable from metadata."
+        },
+        "version": {
+          "type": "string",
+          "description": "The version identifier of the document, if versioning is tracked."
+        },
+        "language": {
+          "type": "string",
+          "description": "The primary language of the document content (e.g., 'en', 'es')."
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "content",
+        "fileType",
+        "sourceSystemId",
+        "ingestedAt"
+      ]
+    },
+    "SourceSystem": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "SourceSystem",
+      "type": "object",
+      "description": "Defines an external system or location from which internal documents are ingested (e.g., HR portal, shared drive, intranet).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the SourceSystem entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "A user-friendly name for the source system (e.g., 'Company Intranet', 'HR Policy SharePoint')."
+        },
+        "type": {
+          "type": "string",
+          "description": "The type of the source system (e.g., 'Web Portal', 'File Share', 'Wiki')."
+        },
+        "description": {
+          "type": "string",
+          "description": "A detailed description of the source system and its purpose."
+        },
+        "baseUrl": {
+          "type": "string",
+          "description": "The base URL for web-based source systems, used for linking or API access.",
+          "format": "uri"
+        },
+        "lastIngestionAttemptAt": {
+          "type": "string",
+          "description": "Timestamp of the most recent attempt to ingest documents from this source system.",
+          "format": "date-time"
+        },
+        "lastSuccessfulIngestionAt": {
+          "type": "string",
+          "description": "Timestamp of the last successful ingestion of documents from this source system.",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "description": "The current operational status of the source system integration (e.g., 'Active', 'Inactive', 'Error')."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "type",
+        "description",
+        "status"
+      ]
+    },
+    "UserQuery": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "UserQuery",
+      "type": "object",
+      "description": "Records an employee's natural language query or question submitted to the InfoWise search engine or chatbot.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the UserQuery entity."
+        },
+        "queryText": {
+          "type": "string",
+          "description": "The natural language text of the query submitted by the user."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the unique identifier of the employee who made the query, from an external authentication system."
+        },
+        "queryTime": {
+          "type": "string",
+          "description": "Timestamp when the query was submitted.",
+          "format": "date-time"
+        },
+        "responseGiven": {
+          "type": "string",
+          "description": "The answer or response generated by the AI system to the user's query."
+        },
+        "documentIdsUsed": {
+          "type": "array",
+          "description": "References to the Document entities that were retrieved and used by the RAG architecture to formulate the response. (Relationship: Document N:N UserQuery)",
+          "items": {
+            "type": "string"
+          }
+        },
+        "toolUsed": {
+          "type": "boolean",
+          "description": "Indicates whether the internal search tool was leveraged by the chatbot to improve its response."
+        }
+      },
+      "required": [
+        "id",
+        "queryText",
+        "userId",
+        "queryTime",
+        "responseGiven"
+      ]
+    },
+    "Feedback": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Feedback",
+      "type": "object",
+      "description": "Captures an employee's feedback on the accuracy and relevance of the InfoWise system's responses.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Feedback entity."
+        },
+        "userQueryId": {
+          "type": "string",
+          "description": "Reference to the UserQuery this feedback is associated with. (Relationship: UserQuery 1:N Feedback)"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the unique identifier of the employee who provided the feedback, from an external authentication system."
+        },
+        "rating": {
+          "type": "number",
+          "description": "A numerical rating (e.g., 1-5, or 0/1 for helpful/not helpful) indicating the quality of the response."
+        },
+        "comments": {
+          "type": "string",
+          "description": "Optional detailed comments provided by the user about the response."
+        },
+        "feedbackTime": {
+          "type": "string",
+          "description": "Timestamp when the feedback was submitted.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userQueryId",
+        "userId",
+        "rating",
+        "feedbackTime"
+      ]
+    },
+    "Tag": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Tag",
+      "type": "object",
+      "description": "Represents a categorical label used to organize and classify documents within the InfoWise knowledge base.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Tag entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the tag (e.g., 'HR Policy', 'IT Troubleshooting', 'Benefits')."
+        },
+        "description": {
+          "type": "string",
+          "description": "A brief description explaining the purpose or scope of the tag."
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user account in the system, typically mirroring data from Firebase Authentication.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user, corresponding to the Firebase Auth UID."
+        },
+        "email": {
+          "type": "string",
+          "description": "The user's primary email address.",
+          "format": "email"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "The user's public display name."
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "URL of the user's profile picture.",
+          "format": "uri"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the user account was created.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "email"
+      ]
+    },
+    "AdminRole": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "AdminRole",
+      "type": "object",
+      "description": "A marker entity to signify that a user has administrative privileges. The document's existence at /roles_admin/{userId} is sufficient to grant the role.",
+      "properties": {
+        "assignedAt": {
+          "type": "string",
+          "description": "Timestamp indicating when the admin role was assigned.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "assignedAt"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Global collection for user profiles. Used to list users in the admin panel. Users can create and update their own profile. Admins can read the entire collection.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "Unique identifier for the User document, same as Firebase Auth UID."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/documents/{documentId}",
+        "definition": {
+          "entityName": "Document",
+          "schema": {
+            "$ref": "#/backend/entities/Document"
+          },
+          "description": "Global collection for ingested documents. All authenticated employees have read access. Only users with an 'admin' role can create, update, or delete documents. Documents include denormalized 'sourceSystemId' and 'tags' array for search and display purposes."
+        }
+      },
+      {
+        "path": "/sourceSystems/{sourceSystemId}",
+        "definition": {
+          "entityName": "SourceSystem",
+          "schema": {
+            "$ref": "#/backend/entities/SourceSystem"
+          },
+          "description": "Global collection for defining and managing external systems from which documents are ingested. Only users with an 'admin' role can read/write to this collection.",
+          "params": [
+            {
+              "name": "sourceSystemId",
+              "description": "Unique identifier for the SourceSystem document."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/userQueries/{userQueryId}",
+        "definition": {
+          "entityName": "UserQuery",
+          "schema": {
+            "$ref": "#/backend/entities/UserQuery"
+          },
+          "description": "Stores individual user queries submitted to the system. Access is restricted to the owning user and administrators. Includes denormalized 'userId' for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "Unique identifier of the user making the query."
+            },
+            {
+              "name": "userQueryId",
+              "description": "Unique identifier for the UserQuery document."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/userQueries/{userQueryId}/feedback/{feedbackId}",
+        "definition": {
+          "entityName": "Feedback",
+          "schema": {
+            "$ref": "#/backend/entities/Feedback"
+          },
+          "description": "Captures feedback provided by a user on a specific query response. Access is restricted to the owning user and administrators. Includes denormalized 'userId' and 'userQueryId' for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "Unique identifier of the user who provided the feedback."
+            },
+            {
+              "name": "userQueryId",
+              "description": "Unique identifier of the UserQuery associated with this feedback."
+            },
+            {
+              "name": "feedbackId",
+              "description": "Unique identifier for the Feedback document."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/tags/{tagId}",
+        "definition": {
+          "entityName": "Tag",
+          "schema": {
+            "$ref": "#/backend/entities/Tag"
+          },
+          "description": "Global collection for categorical tags used to organize documents. Only users with an 'admin' role can create/update tags, while all authenticated users can read them.",
+          "params": [
+            {
+              "name": "tagId",
+              "description": "Unique identifier for the Tag document."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/roles_admin/{userId}",
+        "definition": {
+          "entityName": "AdminRole",
+          "schema": {
+            "$ref": "#/backend/entities/AdminRole"
+          },
+          "description": "A dedicated collection for managing administrative roles. The mere existence of a document at this path signifies that the corresponding 'userId' has administrator privileges. This allows security rules to check for admin status using `exists()` without needing custom claims or complex queries.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "Unique identifier of the user with an administrative role."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The proposed Firestore structure prioritizes Authorization Independence, Structural Segregation, and consistent Access Modeling to ensure robust security rules and efficient data access. \n\n**Authorization Independence (CRITICAL):**\n\n1.  **Denormalization for User-Owned Data:** For user-specific data like `UserQuery` and `Feedback`, the `userId` is embedded directly within the document and also used as a segment in the path (`/users/{userId}/userQueries/{userQueryId}`). This design ensures that security rules can always determine ownership by checking `request.auth.uid == resource.data.userId` or `request.auth.uid == userId` (from the path wildcard) without needing to perform `get()` operations on parent documents. For instance, a user's feedback document at `/users/{userId}/userQueries/{userQueryId}/feedback/{feedbackId}` explicitly contains `userId`, enabling a rule like `allow read, write: if request.auth.uid == userId;` directly on the `feedback` document, making it independent of its `userQuery` parent's data for authorization.\n2.  **Global Authorization Context:** For collections like `documents`, `sourceSystems`, and `tags` that are not directly owned by a single user or have an application-wide scope, authorization is determined either globally (e.g., all authenticated users can read documents) or via a separate, explicit roles collection (e.g., `/roles_admin/{userId}`). This avoids complex `get()` calls to infer permissions from unrelated documents.\n\n**Querying for Authorization Purposes (QAPs - Rules are not Filters):**\n\n1.  **Structural Segregation for Global Data:** Collections like `/documents`, `/sourceSystems`, and `/tags` store documents with a uniform security posture. For example, all `documents` are intended to be readable by all authenticated employees, and all `sourceSystems` are manageable only by administrators. This allows security rules to be straightforward (e.g., `allow read: if request.auth.uid != null;` for documents, or `allow read, write: if exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid));` for source systems). When a `list` query is performed on these collections, the rule applies uniformly to all documents, guaranteeing that only permitted documents are returned without relying on complex filter expressions in rules.\n2.  **Path-Based Ownership for User-Specific Data:** The `/users/{userId}/userQueries` and `/users/{userId}/userQueries/{userQueryId}/feedback` structures naturally segment data by owner. When a user queries `/users/my_user_id/userQueries`, the `userId` wildcard in the rule (`allow list: if request.auth.uid == userId;`) ensures that the query itself is constrained to the authorized user's data. This inherently satisfies QAPs because the database's `list` operation will only return data matching the path, which is directly tied to the requester's authenticated ID. Any attempt by a user to list data for a different `userId` will fail at the rule level, as `request.auth.uid` will not match the requested `userId` in the path."
+  }
+}

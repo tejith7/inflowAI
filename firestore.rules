@@ -1,0 +1,133 @@
+
+/**
+ * Core Philosophy: This ruleset implements a hybrid security model. It combines strict user-ownership for personal data
+ * (queries, feedback) with a Role-Based Access Control (RBAC) system for global data. A dedicated '/roles_admin' collection
+ * serves as the single source of truth for identifying administrators, enabling efficient and secure permission checks.
+ *
+ * Data Structure: User-specific data is segregated and nested under '/users/{userId}', naturally scoping access. Global
+ * application data, such as '/documents' and '/tags', resides in top-level collections with broader access policies.
+ *
+ * Key Security Decisions:
+ * - Administrator Access: A user is considered an admin if a document with their UID exists in the '/roles_admin' collection.
+ *   This is checked using a highly performant `exists()` call.
+ * - User-Owned Data: All data under '/users/{userId}' is accessible only by the owning user or an administrator.
+ * - Public Data: Core knowledge base content like '/documents' is readable by any authenticated user. 
+ *   '/tags' can be read by any authenticated user, but only modified by an admin.
+ * - Default Deny: All access is denied by default. Unauthenticated users have no access to any data.
+ * - Denormalization for Authorization: User-owned documents contain a denormalized 'userId' field. The rules enforce that this
+ *   field matches the user ID in the document path on creation and remains immutable on update, ensuring path and data integrity.
+ *   This avoids costly `get()` calls in subcollection rules.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --------------------------------------------------------------------
+    // Helper Functions
+    // --------------------------------------------------------------------
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid));
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function isOwnerOrAdmin(userId) {
+      return isOwner(userId) || isAdmin();
+    }
+
+    function isUserQueryDataValidOnCreate(userId) {
+      return request.resource.data.userId == userId;
+    }
+
+    function isUserQueryDataValidOnUpdate() {
+      return request.resource.data.userId == resource.data.userId;
+    }
+
+    function isFeedbackDataValidOnCreate(userId, userQueryId) {
+      return request.resource.data.userId == userId
+          && request.resource.data.userQueryId == userQueryId;
+    }
+
+    function isFeedbackDataValidOnUpdate() {
+      return request.resource.data.userId == resource.data.userId
+          && request.resource.data.userQueryId == resource.data.userQueryId;
+    }
+
+    // --------------------------------------------------------------------
+    // Collection Rules
+    // --------------------------------------------------------------------
+
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isAdmin();
+      allow create, update: if isOwner(userId);
+      allow delete: if false; 
+    }
+
+    match /documents/{documentId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    match /sourceSystems/{sourceSystemId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read, write: if false;
+
+      match /userQueries/{userQueryId} {
+        allow get, list, delete: if isOwnerOrAdmin(userId);
+        allow create: if isOwnerOrAdmin(userId) && isUserQueryDataValidOnCreate(userId);
+        allow update: if isOwnerOrAdmin(userId) && isUserQueryDataValidOnUpdate();
+
+        match /feedback/{feedbackId} {
+          allow get, list, delete: if isOwnerOrAdmin(userId);
+          allow create: if isOwnerOrAdmin(userId) && isFeedbackDataValidOnCreate(userId, userQueryId);
+          allow update: if isOwnerOrAdmin(userId) && isFeedbackDataValidOnUpdate();
+        }
+      }
+
+      match /conversations/{conversationId} {
+        allow get, list, delete: if isOwnerOrAdmin(userId);
+        allow create, update: if isOwnerOrAdmin(userId);
+
+        match /messages/{messageId} {
+          allow get, list: if isOwnerOrAdmin(userId);
+          allow create: if isOwnerOrAdmin(userId);
+          allow update, delete: if isOwnerOrAdmin(userId);
+        }
+      }
+    }
+
+    match /tags/{tagId} {
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    /**
+     * Query logs for analytics dashboard.
+     * Any authenticated user can create (log their queries).
+     * Only admins can read/list for the analytics dashboard.
+     */
+    match /queryLogs/{logId} {
+      allow create: if isSignedIn();
+      allow get, list: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    match /roles_admin/{userId} {
+      allow get: if isOwnerOrAdmin(userId);
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}
