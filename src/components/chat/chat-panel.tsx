@@ -57,16 +57,11 @@ export function ChatPanel({ messages, setMessages, chatHistory }: ChatPanelProps
 
   const scrollToBottom = () => {
     if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTo({
-        top: scrollAreaRef.current.scrollHeight,
-        behavior: 'smooth',
-      });
+      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
     }
   };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  useEffect(scrollToBottom, [messages, isLoading]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -128,17 +123,21 @@ export function ChatPanel({ messages, setMessages, chatHistory }: ChatPanelProps
       : [];
 
     try {
-      const response = await fetch('/api/chat/stream', {
+      const res = await fetch('/api/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, conversationHistory, contextDocuments }),
+        body: JSON.stringify({
+          query,
+          conversationHistory,
+          contextDocuments,
+        }),
       });
 
-      if (!response.ok || !response.body) {
-        throw new Error('Stream request failed');
+      if (!res.ok || !res.body) {
+        throw new Error(`Stream request failed (${res.status})`);
       }
 
-      const reader = response.body.getReader();
+      const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let streamedContent = '';
       let finalCitations: string[] = [];
@@ -232,12 +231,21 @@ export function ChatPanel({ messages, setMessages, chatHistory }: ChatPanelProps
 
     } catch (error) {
       setIsLoading(false);
+      const errorMsg = error instanceof Error ? error.message : 'Please try again.';
       toast({
         variant: 'destructive',
         title: 'An error occurred',
-        description: error instanceof Error ? error.message : 'Please try again.',
+        description: errorMsg,
       });
-      setMessages((prev) => prev.filter((m) => m.id !== streamingMsgId));
+      // Replace streaming placeholder with error message instead of removing
+      const errorResponse: Message = {
+        id: streamingMsgId,
+        role: 'bot',
+        content: `Sorry, I couldn't process your request. ${errorMsg}`,
+      };
+      setMessages((prev) =>
+        prev.map((m) => (m.id === streamingMsgId ? errorResponse : m))
+      );
     }
   };
 
@@ -261,7 +269,7 @@ export function ChatPanel({ messages, setMessages, chatHistory }: ChatPanelProps
               <ChatMessage
                 key={msg.id}
                 message={msg}
-                isLoading={isLoading && msg.id === 'loading'}
+                isLoading={isLoading && msg.content === ''}
               />
             ))}
           </div>
